@@ -1,0 +1,26 @@
+# --- Secretos (Módulo 6: anti-fuga de credenciales) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+known_hosts
+
+# --- Configuraciones generadas (pueden contener secretos ya sustituidos) ---
+configs_out/
+*.zip
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Editores / SO ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

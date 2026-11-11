@@ -1,0 +1,8 @@
+# RED-LION-INTERCONNECTION — dependencias de ejecución
+streamlit>=1.45
+paramiko>=3.4
+pyserial>=3.5
+python-dotenv>=1.0
+pandas>=2.0
+# Desarrollo y pruebas (Corte 3)
+pytest>=8.0
