@@ -160,8 +160,8 @@ def port_plan(ctx: Ctx, device: Device) -> list[PortGroup]:
         return groups
 
     seg = ctx.segment_for_floor(device.floor)
-    n_sw = access_switches_for_floor(ctx.cfg, seg.hosts_required)
     floor_devices = [d for d in ctx.topo.by_role("access") if d.floor == device.floor]
+    n_sw = len(floor_devices)  # los que existan en la topología (propuesta o cargada)
     idx = floor_devices.index(device)
 
     # Demanda total del piso, en orden de prioridad
@@ -229,3 +229,39 @@ def ranges(numbers: list[int]) -> str:
 
 def prefix_str(network) -> str:
     return f"{network.network_address}/{network.prefixlen}"
+
+
+# --------------------------------------------------------------------------- #
+# Enlaces WAN cargados por el usuario (Módulo 3 → carga de topología)
+# --------------------------------------------------------------------------- #
+
+
+def extra_wan_lines(vendor: str, ctx: Ctx, device: Device) -> list[str]:
+    """Interfaces /30 + OSPF para los enlaces WAN que el usuario agregó a la topología."""
+    from core.topology_io import extra_links_for
+
+    links = extra_links_for(ctx.topo, device.id)
+    if not links:
+        return []
+    L: list[str] = []
+    for i, (link, ip, peer) in enumerate(links):
+        net, mask, wild = link.network.network_address, link.mask, link.wildcard
+        if vendor == "Cisco":
+            L += [f"interface GigabitEthernet0/1/{i + 1}", f" description WAN-{peer}",
+                  f" ip address {ip} {mask}", " ip ospf network point-to-point", " no shutdown", "!",
+                  "router ospf 1", f" network {net} {wild} area 0", "!"]
+        elif vendor == "Huawei":
+            L += [f"interface GigabitEthernet0/0/{4 + i}", f" description WAN-{peer}",
+                  f" ip address {ip} {mask}", " ospf network-type p2p", "#",
+                  "ospf 1", " area 0.0.0.0", f"  network {net} {wild}", "#"]
+        elif vendor == "Fortinet":
+            L += ["config system interface", f'    edit "port{5 + i}"', f'        set alias "WAN-{peer}"',
+                  f"        set ip {ip} {mask}", "        set allowaccess ping", "        set role wan",
+                  "    next", "end",
+                  "config router ospf", "    config network", f"        edit {50 + i}",
+                  f"            set prefix {net} {mask}", "        next", "    end", "end"]
+        else:  # MikroTik
+            L += [f"/interface ethernet set [find default-name=ether{6 + i}] comment=WAN-{peer}",
+                  f"/ip address add address={ip}/30 interface=ether{6 + i} comment=WAN-{peer}",
+                  f"/routing ospf interface-template add area=backbone-v2 networks={net}/30"]
+    return L

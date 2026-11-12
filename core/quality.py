@@ -30,6 +30,7 @@ WEIGHT_TESTS, WEIGHT_SECURITY, WEIGHT_COVERAGE = 0.60, 0.25, 0.15
 CATEGORIES = {
     "test_ipam": "M2 · Planificación IP",
     "test_topology": "M3 · Topología",
+    "test_topology_io": "M3 · Carga de topología",
     "test_generators": "M4 · Configuraciones multi-marca",
     "test_netdevops": "M5 · Consola NetDevOps",
     "test_deploy": "M5 · Despliegue a equipos",

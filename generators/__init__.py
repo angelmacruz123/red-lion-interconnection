@@ -16,17 +16,41 @@ from core.state import ProjectConfig
 from core.topology import Topology
 
 from . import cisco, fortinet, huawei, mikrotik
-from .common import Ctx, Extras, GeneratedConfig, header
+from .common import Ctx, Extras, GeneratedConfig, extra_wan_lines, header
 
 ENGINES = {"Cisco": cisco, "Huawei": huawei, "Fortinet": fortinet, "MikroTik": mikrotik}
-CONFIGURABLE_ROLES = ("edge", "dist", "core", "access", "server")
+CONFIGURABLE_ROLES = ("edge", "dist", "core", "access", "server", "router")
+
+# Bloque final de cada fabricante (los enlaces WAN cargados se insertan antes)
+_TRAILER = {"Cisco": ["end", "write memory"], "Huawei": ["return", "save"], "Fortinet": [], "MikroTik": []}
+
+
+def _router(engine, vendor: str, ctx: Ctx, dev) -> str:
+    """Router adicional cargado por el usuario: hardening + sus enlaces WAN."""
+    hardening = {"Cisco": lambda: engine._hardening(ctx, dev.hostname) + ["ipv6 unicast-routing", "!"],
+                 "Huawei": lambda: engine._hardening(ctx, dev.hostname),
+                 "Fortinet": lambda: engine._global(ctx, dev.hostname),
+                 "MikroTik": lambda: engine._hardening(ctx, dev.hostname)}[vendor]()
+    return "\n".join(hardening + extra_wan_lines(vendor, ctx, dev) + _TRAILER[vendor])
 
 
 def render_device(ctx: Ctx, vendor: str, device_id: str) -> GeneratedConfig:
     engine = ENGINES[vendor]
     dev = ctx.topo.get(device_id)
-    body = engine.RENDER[dev.role](ctx, dev)
-    platform = engine.PLATFORMS[dev.role]
+    if dev.role == "router":
+        body = _router(engine, vendor, ctx, dev)
+        platform = engine.PLATFORMS["edge"]
+    else:
+        body = engine.RENDER[dev.role](ctx, dev)
+        platform = engine.PLATFORMS[dev.role]
+        extra = extra_wan_lines(vendor, ctx, dev)
+        if extra:
+            lines, trailer = body.split("\n"), _TRAILER[vendor]
+            if trailer and lines[-len(trailer):] == trailer:
+                lines = lines[:-len(trailer)] + extra + trailer
+            else:
+                lines += extra
+            body = "\n".join(lines)
     text = header(ctx, dev.hostname, vendor, platform, engine.COMMENT) + "\n" + body + "\n"
     return GeneratedConfig(dev.id, dev.hostname, vendor, dev.role, platform, text)
 
