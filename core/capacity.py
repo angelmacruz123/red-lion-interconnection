@@ -53,6 +53,8 @@ def bill_of_materials(cfg: ProjectConfig, topo: Topology, vendor: str | None = N
         BomLine("Switch núcleo L3", counts.get("core", 0), price["core"]),
         BomLine("Switch de acceso 48p", counts.get("access", 0), price["access"]),
     ]
+    if counts.get("router"):
+        lines.append(BomLine("Router adicional (topología cargada)", counts["router"], price["edge"]))
     if counts.get("server"):
         lines.append(BomLine("Switch granja de servidores", counts["server"], price["server"]))
     if cfg.has("Wi-Fi"):

@@ -118,8 +118,9 @@ def render() -> None:
 
 def _connection_panel(topo, cfg) -> Conn:
     section("1 · Conexión")
-    devices = [d for d in topo.devices if d.role in ("edge", "dist", "core", "access", "server")]
-    roles = {"edge": "Borde", "dist": "Distribución", "core": "Núcleo", "access": "Acceso", "server": "Servidores"}
+    devices = [d for d in topo.devices if d.role in ("edge", "dist", "core", "access", "server", "router")]
+    roles = {"edge": "Borde", "dist": "Distribución", "core": "Núcleo", "access": "Acceso", "server": "Servidores",
+             "router": "Router adicional"}
     a, b, c = st.columns([1.9, 0.9, 1.5])
     mode = a.segmented_control("Modo", MODES, default="Simulación", key="console_mode") or "Simulación"
     vendor = b.selectbox("Fabricante", VENDORS, index=VENDORS.index(cfg.vendor), key="console_vendor")

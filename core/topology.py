@@ -48,6 +48,8 @@ class Edge:
 class Topology:
     devices: list[Device] = field(default_factory=list)
     edges: list[Edge] = field(default_factory=list)
+    extra_links: list = field(default_factory=list)   # enlaces WAN /30 cargados por el usuario
+    custom: bool = False                               # True = topología cargada/editada por el usuario
 
     def get(self, device_id: str) -> Device:
         for d in self.devices:
@@ -155,6 +157,7 @@ _PALETTE = {
     "server": ("#3a1f08", "#f59e0b"),
     "dmz": ("#2b0f2a", "#e879f9"),
     "remote": ("#1c1214", "#d6c8ca"),
+    "router": ("#5c0a12", "#ff8a95"),
 }
 
 
@@ -212,13 +215,14 @@ def to_dot(topo: Topology, title: str = "") -> str:
     # Ranking por capa para que el árbol sea realmente jerárquico
     ranks = {
         "Acc": [d.id for d in nodes if d.role in ("access", "server")],
+        "Ext": [d.id for d in nodes if d.role == "router"],
     }
     for ids in ranks.values():
         if ids:
             lines.append("  { rank=same; " + " ".join(f'"{i}";' for i in ids) + " }")
 
     for e in edges:
-        style = {"p2p": 'color="#ef233c", penwidth=1.8',
+        style = {"p2p": 'color="#ef233c", penwidth=1.8', "wan": 'color="#ff8a95", penwidth=1.8',
                  "trunk": 'color="#4a2a2e"',
                  "vpn": 'color="#fbbf24", style=dashed, penwidth=1.4'}[e.kind]
         lines.append(f'  "{e.a}" -> "{e.b}" [label="{_dot_escape(e.label)}", {style}];')
@@ -251,6 +255,7 @@ def to_mermaid(topo: Topology) -> str:
         "server": "fill:#3a1f08,stroke:#f59e0b,color:#fff",
         "dmz": "fill:#2b0f2a,stroke:#e879f9,color:#fff",
         "remote": "fill:#1c1214,stroke:#d6c8ca,color:#fff",
+        "router": "fill:#5c0a12,stroke:#ff8a95,color:#fff",
     }
     for role, style in classes.items():
         ids = [mid(d.id) for d in nodes if d.role == role]

@@ -70,3 +70,13 @@ def test_modo_consola_serial_renderiza():
     at.run()
     assert not at.exception, at.exception
     assert any(s.label == "Velocidad" for s in at.selectbox)
+
+
+def test_carga_de_topologia_desde_la_interfaz():
+    at = _open("03  Topología")
+    _button(at, "Aplicar topología").click().run()
+    assert not at.exception, at.exception
+    assert at.session_state["topo_override"]["devices"]
+    assert any("Topología cargada" in m.value for m in at.markdown)
+    at.sidebar.radio(key="nav").set_value("04  Configuraciones").run()
+    assert not at.exception

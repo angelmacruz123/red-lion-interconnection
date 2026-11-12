@@ -71,7 +71,8 @@ def render() -> None:
             "para reemplazar " + ", ".join(secrets) + " antes de aplicar.", "warn")
 
     section("Vista previa por equipo")
-    roles = {"edge": "Borde", "dist": "Distribución", "core": "Núcleo", "access": "Acceso", "server": "Servidores"}
+    roles = {"edge": "Borde", "dist": "Distribución", "core": "Núcleo", "access": "Acceso", "server": "Servidores",
+             "router": "Router adicional"}
     labels = [f"{roles[c.role]} · {c.hostname}" for c in configs]
     idx = st.selectbox("Equipo", range(len(configs)), format_func=lambda i: labels[i])
     sel = configs[idx]
