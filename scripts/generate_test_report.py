@@ -21,9 +21,8 @@ def main() -> int:
 
     report = quality.build_report()
     path = quality.write_report(report)
-    ok = sum(t.ok for t in report.tests)
-    print(f"Pruebas: {ok}/{len(report.tests)} · Controles: {sum(c.ok for c in report.checks)}/"
-          f"{len(report.checks)} · Confianza: {report.confidence} %")
+    print(f"Pruebas superadas: {report.passed} de {len(report.tests)} = {report.confidence:g}% de confianza "
+          f"· Controles de seguridad: {sum(c.ok for c in report.checks)}/{len(report.checks)}")
     print(f"Reporte: {path}")
     return 0 if report.confidence >= args.min else 1
 

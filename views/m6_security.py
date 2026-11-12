@@ -18,7 +18,7 @@ def render() -> None:
 
     if report:
         tone = "ok" if report.confidence >= 90 else "warn" if report.confidence >= 75 else "bad"
-        status = f"Confianza {report.confidence} %"
+        status = f"{report.passed} de {len(report.tests)} = {report.confidence:g} % de confianza"
     else:
         tone, status = "warn", "Pruebas sin ejecutar"
     hero("Módulo 6 · Ciberdefensa", "Seguridad y porcentaje de confianza",
@@ -28,8 +28,9 @@ def render() -> None:
     tests_ok = sum(t.ok for t in report.tests) if report else 0
     tests_total = len(report.tests) if report else 0
     stat_grid([
-        Stat("Confianza del sistema", f"{report.confidence} %" if report else "—",
-             "60 % pruebas · 25 % seguridad · 15 % cobertura", report.confidence if report else 0, tone),
+        Stat("% de confianza", f"{report.confidence:g} %" if report else "—",
+             f"{report.passed} de {len(report.tests)} pruebas superadas" if report else "ejecute la batería",
+             report.confidence if report else 0, tone),
         Stat("Pruebas superadas", f"{tests_ok} / {tests_total}" if report else "—",
              f"{report.duration_s:.1f} s" if report else "ejecute la batería",
              100 * report.pass_rate if report else 0, "ok" if report and report.pass_rate == 1 else "warn"),

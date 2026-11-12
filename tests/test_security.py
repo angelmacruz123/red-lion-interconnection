@@ -53,6 +53,9 @@ def test_reporte_de_confianza_formula():
         tests=[quality.TestCase(k, "t", True) for k in quality.CATEGORIES],
         checks=[quality.Check("a", True, ""), quality.Check("b", False, "")])
     assert r.pass_rate == 1.0 and r.security_score == 0.5 and r.coverage_score == 1.0
-    assert r.confidence == round(100 * (0.60 + 0.25 * 0.5 + 0.15), 1)
+    assert r.confidence == 100.0  # confianza = pruebas superadas / total (rúbrica)
+    r.tests.append(quality.TestCase("test_ipam", "test_x", False, "falló"))
+    assert r.confidence == round(100 * len(quality.CATEGORIES) / (len(quality.CATEGORIES) + 1), 1)
     md = quality.render_markdown(r)
-    assert "Confianza" in md and "| `test_ipam` |" in md
+    assert f"Pruebas superadas: {r.passed} de {len(r.tests)}" in md and "| `test_ipam` |" in md
+    assert "[P1]" in md and "FALLA" in md
