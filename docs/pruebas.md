@@ -1,6 +1,6 @@
 # Reporte de pruebas y porcentaje de confianza
 
-> Generado automáticamente por `core/quality.py` el 2026-11-10 23:59. No editar a mano: vuelva a ejecutar `python scripts/generate_test_report.py`.
+> Generado automáticamente por `core/quality.py` el 2026-11-11 19:15. No editar a mano: vuelva a ejecutar `python scripts/generate_test_report.py`.
 
 ## Resultado: **100.0 %** de confianza (nivel ALTA)
 
@@ -12,7 +12,7 @@
 
 **Fórmula:** `Confianza = 0.60·(pruebas OK / total) + 0.25·(controles OK / total) + 0.15·(categorías con pruebas OK / categorías)`
 
-Total de pruebas: **218** · Superadas: **218** · Fallidas: **0** · Duración: 65.7 s
+Total de pruebas: **218** · Superadas: **218** · Fallidas: **0** · Duración: 65.9 s
 
 ## Resultados por módulo
 
