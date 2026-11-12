@@ -5,6 +5,15 @@ la infraestructura de red de un edificio corporativo, campus o conjunto de sedes
 requerimientos se propaga automáticamente al plan IP, la topología, las configuraciones CLI de cuatro
 fabricantes y la consola de automatización.
 
+## Informe técnico
+
+El informe completo del trabajo, con capturas de cada módulo, diagramas de arquitectura y resultados de pruebas:
+
+- [docs/informe-tecnico.pdf](docs/informe-tecnico.pdf) (PDF, 26 páginas)
+- [docs/informe-tecnico.docx](docs/informe-tecnico.docx) (Word, editable)
+
+## Módulos
+
 | Módulo | Qué hace |
 |---|---|
 | 1 · Requerimientos | Escenario, pisos/zonas, hosts, presupuesto, ancho de banda, servicios, VPN, redes base. BOM y viabilidad. |
