@@ -80,3 +80,10 @@ def test_carga_de_topologia_desde_la_interfaz():
     assert any("Topología cargada" in m.value for m in at.markdown)
     at.sidebar.radio(key="nav").set_value("04  Configuraciones").run()
     assert not at.exception
+
+
+def test_auditoria_de_configuracion_insegura_en_la_interfaz():
+    at = _open("06  Ciberdefensa y pruebas")
+    assert any("Configuración insegura" in e.value for e in at.error)
+    at.text_area(key="audit_text").set_value("transport input ssh\nip ssh version 2").run()
+    assert not any("Configuración insegura" in e.value for e in at.error)

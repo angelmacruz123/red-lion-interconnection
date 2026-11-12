@@ -265,3 +265,36 @@ def extra_wan_lines(vendor: str, ctx: Ctx, device: Device) -> list[str]:
                   f"/ip address add address={ip}/30 interface=ether{6 + i} comment=WAN-{peer}",
                   f"/routing ospf interface-template add area=backbone-v2 networks={net}/30"]
     return L
+
+
+def device_summary(ctx: Ctx, device: Device) -> tuple[list[int], list[tuple[str, str]]]:
+    """(VLAN, [(interfaz, IP/prefijo)]) del equipo, tomados del plan: lo que su configuración aplica."""
+    from core.topology_io import extra_links_for
+
+    p, role = ctx.plan, device.role
+    vlans: list[int] = []
+    ips: list[tuple[str, str]] = []
+    if role == "edge":
+        isp, down, dmz = p.link("ISP-EDGE"), p.link("EDGE-DIST"), p.segment("dmz")
+        ips += [("WAN-ISP", f"{isp.b_ip}/30"), ("P2P-R-DIST", f"{down.a_ip}/30")]
+        if dmz:
+            vlans.append(dmz.vlan)
+            ips.append((f"DMZ (VLAN {dmz.vlan})", f"{dmz.gateway}/{dmz.prefix}"))
+        if p.tunnel:
+            ips.append((p.tunnel.name, f"{p.tunnel.a_ip}/30"))
+    elif role == "dist":
+        up, down = p.link("EDGE-DIST"), p.link("DIST-CORESW")
+        ips += [("P2P-R-CORE", f"{up.b_ip}/30"), ("P2P-SW-CORE", f"{down.a_ip}/30")]
+    elif role == "core":
+        up = p.link("DIST-CORESW")
+        ips.append(("P2P-R-DIST", f"{up.b_ip}/30"))
+        for s in ctx.core_segments:
+            vlans.append(s.vlan)
+            ips.append((f"Vlan{s.vlan} {s.tag}", f"{s.gateway}/{s.prefix}"))
+    elif role in ("access", "server"):
+        mgmt = p.segment("mgmt")
+        vlans = ctx.trunk_vlans_for(device)
+        ips.append((f"Vlan{mgmt.vlan} GESTION", f"{device.mgmt_ip}/{mgmt.prefix}"))
+    for link, ip, peer in extra_links_for(ctx.topo, device.id):
+        ips.append((f"WAN-{peer}", f"{ip}/30"))
+    return sorted(vlans), ips
