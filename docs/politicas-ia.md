@@ -1,67 +1,54 @@
-# Políticas de uso de Inteligencia Artificial
+# docs/politicas-ia.md — Ciberdefensa y uso de IA en la herramienta
 
-Documento del Corte 3. Define cómo se usó y cómo se controla el uso de herramientas de IA generativa
-en el desarrollo de RED-LION-INTERCONNECTION, de acuerdo con las normas de integridad académica de la
-institución. **El equipo debe completar la sección 5 con información veraz antes de entregar.**
+Proyecto: **RED-LION-INTERCONNECTION** · Autor: Angel Mauricio Cruz Gonzalez · Materia: Interconexión de Redes WAN
 
-## 1. Principios
+## Políticas (plantilla del curso)
 
-1. **Transparencia.** Todo uso de IA en código, documentación o diseño se declara (sección 5). No se
-   presenta como propio contenido generado que no se haya entendido, revisado y adaptado.
-2. **Responsabilidad humana.** Los integrantes del equipo son responsables de cada línea entregada:
-   deben poder explicarla, modificarla y defenderla en la sustentación.
-3. **Verificación obligatoria.** Ningún resultado de IA se acepta sin pruebas. La batería automatizada
-   (`docs/pruebas.md`) y la verificación manual de subredes (`docs/plan-direccionamiento.md`) son el
-   control de calidad.
-4. **Confidencialidad.** Nunca se envían a servicios de IA contraseñas, llaves, configuraciones reales de
-   producción, direcciones públicas de la organización ni datos personales.
+1. La herramienta nunca guarda contraseñas ni tokens en el código; van en `.env`
+   (protegido por `.gitignore`).
+2. Con IA pública solo se usan datos de ejemplo, nunca IPs reales, credenciales
+   ni topologías sensibles.
+3. Todo lo que ingresa el usuario se valida y sanea antes de usarse.
+4. La herramienta advierte cuando una configuración es insegura (puertos abiertos,
+   credenciales por defecto) y aplica el mínimo privilegio.
+5. No se ejecuta ningún comando o configuración que no se entienda; lo generado por
+   IA se revisa y se prueba primero.
+6. Toda automatización/acceso a equipos se hace solo en el laboratorio autorizado.
+7. La calidad se mide con pruebas y se reporta el % de confianza (`docs/pruebas.md`).
 
-## 2. Usos permitidos
+## Cómo la herramienta aplica cada política
 
-- Generar borradores de código, plantillas o documentación que luego se revisan línea por línea.
-- Explicar conceptos (VLSM, OSPF, IPsec, paramiko) y proponer alternativas de diseño.
-- Sugerir casos de prueba y revisar código en busca de errores o vulnerabilidades.
-- Mejorar la redacción de documentos escritos por el equipo.
+| # | Política | Dónde se cumple en la herramienta | Prueba que lo verifica |
+|---|---|---|---|
+| 1 | Sin secretos en el código | Las configuraciones generadas usan marcadores `<<ADMIN_SECRET>>`, `<<VPN_PSK>>`…; las credenciales se leen solo de `.env`; `.gitignore` excluye `.env` y `configs_out/`; un escáner busca secretos en el código (Módulo 6) | `tests/test_security.py`, `tests/test_generators.py::test_sin_secretos_reales_solo_marcadores` |
+| 2 | Solo datos de ejemplo con IA | Los escenarios usan redes de documentación y privadas (`10.20.0.0/16`, `2001:db8::/32`, `200.10.10.0/30`); `.env.example` no trae valores; las salidas de equipos se enmascaran antes de mostrarse o guardarse | `tests/test_security.py::test_env_example_sin_valores_secretos` |
+| 3 | Validar y sanear entradas | `core/validators.py`: lista blanca en formularios, CIDR estrictos, hostnames RFC 1123, bloqueo de `;`, `&&`, `$()` y saltos de línea en comandos, escape HTML de la terminal; la topología importada se valida completa antes de aceptarse | `tests/test_validators.py`, `tests/test_topology_io.py` |
+| 4 | Advertir configuraciones inseguras | `core/security_audit.py` revisa cada archivo generado (Módulo 4), cada lote antes de desplegar (Módulo 5) y cualquier configuración pegada (Módulo 6): Telnet, HTTP, SSH v1, credenciales por defecto, contraseñas en claro, SNMP `public`, ACL «permit any», VTY sin ACL, gestión desde la WAN. Las plantillas aplican mínimo privilegio: solo SSH v2, gestión limitada a la VLAN 99, SNMPv3, puertos sin uso apagados | `tests/test_security_audit.py` |
+| 5 | No ejecutar lo que no se entiende | El despliegue muestra la vista previa exacta de lo que se enviará; en equipos reales exige escribir el nombre del equipo; los comandos destructivos (`reload`, `erase`…) requieren confirmación explícita; respaldo previo y detención ante el primer error | `tests/test_deploy.py`, `tests/test_validators.py::test_lote_rechaza_destructivo_sin_confirmacion` |
+| 6 | Solo laboratorio autorizado | SSH verifica la clave del equipo (`known_hosts`); Telnet solo hacia IP privadas y con `ENABLE_TELNET_LAB=true`; la consola serial es una conexión física local | `tests/test_netdevops.py`, `tests/test_serial.py` |
+| 7 | Medir con pruebas | `pytest` + `scripts/generate_test_report.py` escriben `docs/pruebas.md` con «X de Y = Z% de confianza»; se ejecutan en vivo en la sustentación | `docs/pruebas.md` |
 
-## 3. Usos prohibidos
+## Amenazas relacionadas con IA y respuesta
 
-- Entregar código o texto generado por IA sin revisión, sin pruebas o sin declararlo.
-- Usar IA para responder evaluaciones individuales donde el docente lo haya prohibido.
-- Pegar en un chat de IA el archivo `.env`, salidas de `show running-config` con secretos o datos de
-  clientes reales.
-- Inventar resultados de pruebas, capturas o métricas. El porcentaje de confianza solo puede provenir
-  de `scripts/generate_test_report.py`.
+| Amenaza | Respuesta en este proyecto |
+|---|---|
+| Fuga de datos al pegar en una IA pública IPs reales, credenciales o el `.env` | Solo se compartieron con la IA datos de ejemplo; el `.env` nunca se sube ni se comparte |
+| Prompt injection desde fuentes externas | Ningún comando sugerido por una IA o leído de afuera se ejecuta sin pasar por la vista previa, la auditoría y la validación de la herramienta |
+| Código inseguro generado por IA | Todo el código se revisó y se cubrió con pruebas automáticas antes de subirlo |
+| Configuraciones peligrosas | Auditoría automática de configuraciones (política 4) |
+| Sobreconfianza en la IA | Cada respuesta se trató como borrador; la calidad se mide con el % de confianza |
 
-## 4. Controles técnicos implementados en el proyecto
-
-| Riesgo | Control | Dónde |
-|---|---|---|
-| Código generado con errores de cálculo | Pruebas unitarias contra cálculos manuales de subred | `tests/test_ipam.py` |
-| Código generado inseguro (inyección) | Lista blanca de caracteres, tokens prohibidos, comandos destructivos con confirmación | `core/validators.py`, `tests/test_validators.py` |
-| Fuga de credenciales hacia la IA o hacia git | `.env` fuera de git, marcadores `<<…>>`, escáner de secretos, enmascarado de salidas | `.gitignore`, `core/quality.py`, `tests/test_security.py` |
-| Resultados "inventados" | El reporte de confianza se genera ejecutando pytest; no se edita a mano | `core/quality.py` |
-| Configuraciones CLI alucinadas | Pruebas por fabricante que verifican sintaxis clave y que cada IP proviene del plan | `tests/test_generators.py` |
-
-## 5. Declaración de uso (completar por el equipo)
+## Declaración de uso de IA
 
 | Campo | Respuesta |
 |---|---|
-| Herramienta(s) de IA utilizadas | *(p. ej. asistente de IA conversacional, autocompletado en el editor)* |
-| Fechas / período de uso | |
-| Partes del proyecto en que se usó | *(p. ej. estructura inicial del código, plantillas CLI, borrador de documentación)* |
-| Qué se modificó o verificó manualmente | |
-| Partes desarrolladas sin IA | |
-| Integrante(s) que revisaron el resultado | |
+| Herramienta de IA utilizada | Asistente de IA conversacional (Claude, de Anthropic) |
+| Para qué se usó | Generar y explicar el código de la aplicación, las plantillas de configuración, las pruebas automáticas y borradores de la documentación |
+| Qué hice yo | Definí los requerimientos y el escenario, revisé y probé cada módulo, ejecuté las pruebas, verifiqué el subnetting a mano y validé las configuraciones en laboratorio *(completar con lo que corresponda)* |
+| Datos compartidos con la IA | Solo datos de ejemplo; ninguna IP, credencial ni topología real |
 
-**Declaración:** Los abajo firmantes declaramos que hemos revisado, comprendido y probado todo el
-contenido entregado, y que la información de esta sección es veraz.
+**Declaración:** declaro que revisé, comprendí y probé el contenido entregado, y que puedo explicarlo en la sustentación.
 
 | Nombre | Firma | Fecha |
 |---|---|---|
-| | | |
-| | | |
-
-## 6. Referencias de buenas prácticas
-
-- Normas de integridad académica y propiedad intelectual de la institución.
-- OWASP Top 10 (inyección, exposición de datos sensibles) para los controles de la sección 4.
+| Angel Mauricio Cruz Gonzalez | | |

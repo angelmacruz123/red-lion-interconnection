@@ -12,6 +12,8 @@ Complemento técnico del Módulo 6 (Corte 3).
 | Terminal web | XSS a partir de la salida de un equipo comprometido | `html.escape` antes de pintar; Mermaid con `securityLevel: "strict"` y código pasado como JSON |
 | Transporte SSH | MITM / suplantación del equipo | `RejectPolicy` contra `known_hosts`; aceptar claves solo con `ALLOW_UNKNOWN_HOSTS=true` (laboratorio) |
 | Despliegue a equipos (M5) | Cambio accidental en el equipo equivocado, configuración a medias, bloqueo del acceso | Confirmación escribiendo el hostname, respaldo previo, fail-fast sin guardar, hardening bloqueado sin usuario local en `.env`, validación de cada línea (sin control ni marcadores) |
+| Configuraciones (M4, M5, M6) | Puertos abiertos, Telnet, credenciales por defecto, SNMP `public`, ACL «permit any» | `core/security_audit.py` audita cada archivo generado, cada lote antes de desplegar y cualquier configuración pegada; las plantillas aplican mínimo privilegio |
+| Topología importada (M3) | Archivos manipulados o mal formados | Límite de 512 KB, UTF-8, roles y tipos en lista blanca, hostnames RFC 1123, IP de gestión dentro de la VLAN 99, validación completa antes de aceptar |
 | Transporte Telnet | Credenciales en claro | Solo IP privadas/loopback y con `ENABLE_TELNET_LAB=true` |
 | Credenciales | Fuga a git, logs o pantalla | `.env` en `.gitignore`, `repr=False` en la contraseña, `redact_secrets` en toda salida y log |
 | Configuraciones generadas | Secretos en archivos descargables | Plantillas con marcadores `<<ADMIN_SECRET>>`, `<<VPN_PSK>>`, etc.; `configs_out/` ignorado |

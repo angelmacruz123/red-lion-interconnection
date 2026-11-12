@@ -4,9 +4,10 @@ core/quality.py
 Módulo 6 — Auditoría de seguridad del repositorio y cálculo del
 **porcentaje de confianza** del sistema.
 
-    Confianza (%) = 60 % × tasa de pruebas superadas
-                  + 25 % × controles de seguridad cumplidos
-                  + 15 % × cobertura de categorías (módulos con pruebas que pasan)
+    Confianza (%) = pruebas superadas ÷ pruebas ejecutadas × 100   (definición de la rúbrica)
+
+Además se reportan, por separado, los controles de seguridad del repositorio
+y la cobertura de categorías (módulos con pruebas que pasan).
 
 El reporte se escribe en `docs/pruebas.md` (entregable del Corte 3).
 Se puede ejecutar desde la UI (Módulo 6) o por consola:
@@ -24,8 +25,6 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-
-WEIGHT_TESTS, WEIGHT_SECURITY, WEIGHT_COVERAGE = 0.60, 0.25, 0.15
 
 CATEGORIES = {
     "test_ipam": "M2 · Planificación IP",
@@ -86,9 +85,13 @@ class QualityReport:
         return len(covered & set(CATEGORIES)) / len(CATEGORIES)
 
     @property
+    def passed(self) -> int:
+        return sum(t.ok for t in self.tests)
+
+    @property
     def confidence(self) -> float:
-        return round(100 * (WEIGHT_TESTS * self.pass_rate + WEIGHT_SECURITY * self.security_score
-                            + WEIGHT_COVERAGE * self.coverage_score), 1)
+        """% de confianza = pruebas superadas / pruebas ejecutadas (ej. 18 de 20 = 90 %)."""
+        return round(100 * self.pass_rate, 1)
 
     def by_category(self) -> dict[str, tuple[int, int]]:
         out: dict[str, tuple[int, int]] = {}
@@ -189,51 +192,69 @@ def build_report(root: Path = ROOT) -> QualityReport:
     return QualityReport(tests=tests, checks=security_checks(root), duration_s=duration)
 
 
+def _readable(test_name: str) -> str:
+    """test_calculo_manual_de_un_26[x] → 'calculo manual de un 26 [x]' (legible en el reporte)."""
+    base, _, param = test_name.partition("[")
+    text = base.removeprefix("test_").replace("_", " ")
+    if param:
+        param = param.rstrip("]").replace("\n", " ")
+        text += f" [{param[:50]}{'…' if len(param) > 50 else ''}]"
+    return text.replace("|", "/")
+
+
 def render_markdown(r: QualityReport) -> str:
-    level = ("ALTA" if r.confidence >= 90 else "MEDIA" if r.confidence >= 75 else "BAJA")
+    failed = [t for t in r.tests if not t.ok]
     L = [
-        "# Reporte de pruebas y porcentaje de confianza",
+        "# docs/pruebas.md — Reporte de pruebas",
         "",
-        f"> Generado automáticamente por `core/quality.py` el {r.generated_at}. "
-        "No editar a mano: vuelva a ejecutar `python scripts/generate_test_report.py`.",
+        f"> Generado automáticamente por `core/quality.py` el {r.generated_at} al ejecutar `pytest`. "
+        "No se edita a mano: para regenerarlo, `python scripts/generate_test_report.py`.",
         "",
-        f"## Resultado: **{r.confidence} %** de confianza (nivel {level})",
+        "## Resultado",
         "",
-        "| Componente | Peso | Puntaje | Aporte |",
-        "|---|---:|---:|---:|",
-        f"| Pruebas automatizadas superadas | 60 % | {100 * r.pass_rate:.1f} % | {60 * r.pass_rate:.1f} |",
-        f"| Controles de seguridad cumplidos | 25 % | {100 * r.security_score:.1f} % | {25 * r.security_score:.1f} |",
-        f"| Cobertura de categorías | 15 % | {100 * r.coverage_score:.1f} % | {15 * r.coverage_score:.1f} |",
+        f"**Pruebas superadas: {r.passed} de {len(r.tests)} = {r.confidence:g}% de confianza**",
         "",
-        "**Fórmula:** `Confianza = 0.60·(pruebas OK / total) + 0.25·(controles OK / total) "
-        "+ 0.15·(categorías con pruebas OK / categorías)`",
+        f"- Controles de seguridad del repositorio: {sum(c.ok for c in r.checks)} de {len(r.checks)}",
+        f"- Módulos con pruebas que pasan: {round(r.coverage_score * len(CATEGORIES))} de {len(CATEGORIES)}",
+        f"- Duración de la ejecución: {r.duration_s:.1f} s",
         "",
-        f"Total de pruebas: **{len(r.tests)}** · Superadas: **{sum(t.ok for t in r.tests)}** · "
-        f"Fallidas: **{sum(not t.ok for t in r.tests)}** · Duración: {r.duration_s:.1f} s",
+        "## Cómo se corren (también en la sustentación)",
+        "",
+        "```bash",
+        "pytest -q                                   # ejecuta todas las pruebas",
+        "python scripts/generate_test_report.py      # vuelve a escribir este archivo",
+        "```",
+        "",
+        "En la app: Módulo 6 → «Ejecutar batería de pruebas y generar docs/pruebas.md».",
         "",
         "## Resultados por módulo",
         "",
-        "| Categoría | Módulo | OK / Total |",
+        "| Grupo | Módulo | Superadas / Total |",
         "|---|---|---:|",
     ]
     cats = r.by_category()
     for key, label in CATEGORIES.items():
         ok, total = cats.get(key, (0, 0))
         L.append(f"| `{key}` | {label} | {ok} / {total} |")
-    L += ["", "## Controles de ciberdefensa", "", "| Control | Estado | Detalle |", "|---|:---:|---|"]
+    L += ["", "## Qué probé", ""]
+    for n, t in enumerate(r.tests, start=1):
+        label = CATEGORIES.get(t.category, t.category).split(" · ")[-1]
+        L.append(f"- [P{n}] {label}: {_readable(t.name)} -> {'OK' if t.ok else 'FALLA'}")
+    L += ["", "## Qué falta / errores encontrados", ""]
+    L += [f"- `{t.category}::{t.name}` — {t.message}" for t in failed] or [
+        "- Ninguna prueba falla en esta ejecución.",
+        "- Pendiente fuera del alcance: probar el despliegue contra equipos físicos del laboratorio "
+        "(hoy se valida contra un Cisco emulado por SSH y por consola serial)."]
+    L += ["", "## Controles de ciberdefensa del repositorio", "", "| Control | Estado | Detalle |", "|---|:---:|---|"]
     for c in r.checks:
-        L.append(f"| {c.name} | {'✅' if c.ok else '❌'} | {c.detail} |")
-    failed = [t for t in r.tests if not t.ok]
-    L += ["", "## Pruebas fallidas", ""]
-    L += [f"- `{t.category}::{t.name}` — {t.message}" for t in failed] or ["Ninguna."]
-    L += ["", "## Detalle de casos de prueba", "", "| Categoría | Caso | Estado |", "|---|---|:---:|"]
-    L += [f"| {t.category} | `{t.name}` | {'✅' if t.ok else '❌'} |" for t in r.tests]
+        L.append(f"| {c.name} | {'OK' if c.ok else 'FALLA'} | {c.detail} |")
     L += ["", "## Metodología", "",
-          "- **Unitarias:** matemática de subredes contrastada con cálculos manuales (red, broadcast, "
-          "máscara, gateway) y con la regla de 2 IPs útiles en /30.",
+          "- **Unitarias:** subredes contra cálculos manuales (red, broadcast, máscara, gateway) y 2 IP útiles en /30.",
           "- **Propiedades:** ninguna subred se solapa, todas caben en la red base, cada VLAN tiene un /64 único.",
-          "- **Generadores:** cada fabricante produce un archivo por equipo, sin secretos reales y con las IP del plan.",
-          "- **Seguridad:** inyección de comandos, XSS en salida de terminal, enmascarado de contraseñas.",
+          "- **Topología:** importar/exportar JSON y CSV, validación de dispositivos y enlaces, /30 automáticos.",
+          "- **Generadores:** cada marca produce un archivo por equipo, sin secretos reales y con las IP del plan.",
+          "- **Ciberdefensa:** inyección de comandos, XSS, enmascarado de contraseñas, configuraciones inseguras.",
+          "- **Conexión:** despliegue por SSH y por consola serial contra un Cisco emulado; detención ante errores.",
           "- **Interfaz:** cada módulo se ejecuta con `streamlit.testing.AppTest` sin excepciones.",
           ""]
     return "\n".join(L)
