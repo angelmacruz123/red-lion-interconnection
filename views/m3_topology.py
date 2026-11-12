@@ -55,7 +55,7 @@ def render() -> None:
         callout("Ctrl/⌘ + rueda del ratón para hacer zoom; desplácese con las barras o el trackpad.")
         _mermaid(mmd, height=720)
     with t3:
-        rows = [{"Equipo": d.hostname, "Rol": d.role, "Capa": d.layer, "Piso": d.floor or "—",
+        rows = [{"Equipo": d.hostname, "Rol": d.role, "Capa": d.layer, "Piso": str(d.floor or "—"),
                  "IP de gestión": d.mgmt_ip or "—", "Detalle": " · ".join(d.details)} for d in topo.devices]
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
         section("Enlaces")
