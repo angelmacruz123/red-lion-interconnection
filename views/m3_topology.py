@@ -10,8 +10,10 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.state import get_config, get_plan
-from core.topology import to_dot, to_mermaid
+from core import topology_io as tio
+from core.ipam import build_address_plan
+from core.state import clear_topology_override, get_config, get_plan, set_topology_override
+from core.topology import build_topology, to_dot, to_mermaid
 from core.validators import ValidationError
 from ui.components import Stat, callout, hero, section, stat_grid
 
@@ -24,10 +26,14 @@ def render() -> None:
         callout(str(exc), "bad")
         return
 
-    hero("Módulo 3 · Topología", "Arquitectura jerárquica",
-         "Cloud ISP → Router Core → Router de Distribución → Switch Core → Acceso por piso → Servidores/DMZ. "
-         "Cada nodo y enlace se dibuja desde el plan IP calculado; no hay datos inventados.",
-         f"{len(topo.devices)} nodos · {len(topo.edges)} enlaces", "ok")
+    hero("Módulo 3 · Topología", "Carga y modelado de la topología",
+         "La herramienta propone la arquitectura jerárquica desde el plan IP; usted puede editarla o importar la suya "
+         "(dispositivos, roles, enlaces WAN e ISP). Lo cargado alimenta el diagrama y las configuraciones.",
+         f"{'Topología cargada' if topo.custom else 'Topología propuesta'} · {len(topo.devices)} nodos · "
+         f"{len(topo.edges)} enlaces", "warn" if topo.custom else "ok")
+    if st.session_state.pop("topo_override_dropped", False):
+        callout("El diseño cambió en el Módulo 1, así que la topología cargada se descartó. Vuelva a importarla.",
+                "warn")
 
     counts = topo.counts
     stat_grid([
@@ -39,7 +45,10 @@ def render() -> None:
 
     dot = to_dot(topo, cfg.project_name)
     mmd = to_mermaid(topo)
-    t1, t2, t3 = st.tabs(["Diagrama (Graphviz)", "Diagrama interactivo (Mermaid)", "Inventario"])
+    t0, t1, t2, t3 = st.tabs(["Cargar / editar topología", "Diagrama (Graphviz)",
+                              "Diagrama interactivo (Mermaid)", "Inventario"])
+    with t0:
+        _loader(cfg, plan, topo)
     with t1:
         st.graphviz_chart(dot, width="stretch")
     with t2:
@@ -61,6 +70,74 @@ def render() -> None:
     c3.download_button("Imagen (.svg)", svg or b"", f"topologia_{cfg.hostname_prefix}.svg", "image/svg+xml",
                        width="stretch", disabled=svg is None,
                        help=None if svg else "Instale Graphviz (binario 'dot') para exportar SVG.")
+
+
+def _loader(cfg, plan, topo) -> None:
+    """Ingresar, editar, importar y exportar dispositivos y enlaces."""
+    callout("Edite las tablas (puede agregar o quitar filas) o importe un archivo y pulse «Aplicar topología». "
+            "Roles: " + ", ".join(tio.ROLES) + ". Tipos de enlace: " + ", ".join(tio.LINK_TYPES) +
+            ". Un enlace «wan» entre routers recibe su /30 automáticamente.")
+    with st.expander("Importar desde archivo (JSON o CSV)"):
+        a, b, c = st.columns(3)
+        fj = a.file_uploader("Topología completa (.json)", type=["json"], key="up_json")
+        fd = b.file_uploader("Dispositivos (.csv)", type=["csv"], key="up_dev")
+        fl = c.file_uploader("Enlaces (.csv)", type=["csv"], key="up_links")
+        if st.button("Importar archivo(s)", disabled=not (fj or (fd and fl))):
+            try:
+                if fj:
+                    devices, links = tio.from_json(fj.getvalue())
+                else:
+                    devices = tio.from_csv(fd.getvalue(), tio.DEVICE_COLUMNS)
+                    links = tio.from_csv(fl.getvalue(), tio.LINK_COLUMNS)
+                _apply(cfg, plan, devices, links)
+            except ValidationError as exc:
+                st.error(f"Importación rechazada:\n\n{exc}")
+
+    devices, links = tio.topology_to_tables(topo)
+    version = (st.session_state.get("topo_override") or {}).get("version", "base") + cfg.fingerprint()
+    section(f"Dispositivos ({len(devices)})")
+    dev_df = st.data_editor(
+        pd.DataFrame(devices, columns=list(tio.DEVICE_COLUMNS)).astype({"piso": "string"}),
+        num_rows="dynamic", hide_index=True, width="stretch", key=f"ed_dev_{version}",
+        column_config={"rol": st.column_config.SelectboxColumn("rol", options=list(tio.ROLES), required=True),
+                       "piso": st.column_config.TextColumn("piso", help="Solo switches de acceso: 1…" + str(cfg.floors)),
+                       "ip_gestion": st.column_config.TextColumn("ip_gestion",
+                                                                 help=f"Dentro de {plan.segment('mgmt').network}")})
+    section(f"Enlaces ({len(links)})")
+    link_df = st.data_editor(
+        pd.DataFrame(links, columns=list(tio.LINK_COLUMNS)), num_rows="dynamic", hide_index=True,
+        width="stretch", key=f"ed_links_{version}",
+        column_config={"tipo": st.column_config.SelectboxColumn("tipo", options=list(tio.LINK_TYPES), required=True)})
+
+    c1, c2, c3, c4 = st.columns(4)
+    if c1.button("Aplicar topología", type="primary", width="stretch"):
+        try:
+            _apply(cfg, plan, dev_df.fillna("").to_dict("records"), link_df.fillna("").to_dict("records"))
+        except ValidationError as exc:
+            st.error(f"Topología rechazada por la validación:\n\n{exc}")
+    if c2.button("Restablecer la propuesta", width="stretch", disabled=not topo.custom):
+        clear_topology_override()
+        st.rerun()
+    c3.download_button("Exportar .json", tio.to_json(topo).encode("utf-8"),
+                       f"topologia_{cfg.hostname_prefix}.json", "application/json", width="stretch")
+    c4.download_button("Exportar .csv (dispositivos)", tio.devices_csv(topo).encode("utf-8"),
+                       f"dispositivos_{cfg.hostname_prefix}.csv", "text/csv", width="stretch")
+    if topo.extra_links:
+        section("Enlaces WAN agregados (/30 asignados automáticamente)")
+        st.dataframe(pd.DataFrame([{"Enlace": l.name, "Lado A": l.a_device, "IP A": str(l.a_ip),
+                                    "Lado B": l.b_device, "IP B": str(l.b_ip), "Red /30": str(l.network)}
+                                   for l in topo.extra_links]), hide_index=True, width="stretch")
+
+
+def _apply(cfg, plan, devices: list[dict], links: list[dict]) -> None:
+    """Valida contra la topología propuesta y, si todo es correcto, la guarda en el estado global."""
+    base = build_topology(cfg, build_address_plan(cfg))
+    tio.build_from_tables(cfg, plan, base, devices, links)  # lanza ValidationError con todos los errores
+    clean = [{k: ("" if v is None else str(v).strip()) for k, v in r.items()} for r in devices]
+    clean_links = [{k: ("" if v is None else str(v).strip()) for k, v in r.items()} for r in links]
+    set_topology_override(clean, clean_links)
+    st.toast("Topología cargada: diagrama y configuraciones actualizados", icon="✅")
+    st.rerun()
 
 
 @st.cache_data(show_spinner=False)

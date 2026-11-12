@@ -138,12 +138,46 @@ def get_plan():
     from .ipam import build_address_plan
     from .topology import build_topology
 
+    from .topology_io import build_from_tables
+
     cfg = get_config()
-    key = cfg.fingerprint()
+    override = st.session_state.get("topo_override")
+    key = cfg.fingerprint() + (override["version"] if override else "")
     cache = st.session_state.get("_plan_cache")
     if cache and cache[0] == key:
         return cache[1], cache[2]
     plan = build_address_plan(cfg)
     topo = build_topology(cfg, plan)
+    if override:
+        if override["fingerprint"] == cfg.fingerprint():
+            topo = build_from_tables(cfg, plan, topo, override["devices"], override["links"])
+            topo.custom = True
+        else:
+            # El diseño cambió (pisos, red base…): la topología cargada ya no corresponde.
+            st.session_state.pop("topo_override", None)
+            st.session_state["topo_override_dropped"] = True
+            key = cfg.fingerprint()
     st.session_state["_plan_cache"] = (key, plan, topo)
     return plan, topo
+
+
+def set_topology_override(devices: list[dict], links: list[dict]) -> None:
+    """Guarda la topología cargada por el usuario (ya validada) en el estado global."""
+    import hashlib
+    import json
+
+    import streamlit as st
+
+    raw = json.dumps([devices, links], sort_keys=True, default=str)
+    st.session_state["topo_override"] = {
+        "fingerprint": get_config().fingerprint(), "devices": devices, "links": links,
+        "version": hashlib.sha256(raw.encode()).hexdigest()[:10],
+    }
+    st.session_state.pop("_plan_cache", None)
+
+
+def clear_topology_override() -> None:
+    import streamlit as st
+
+    st.session_state.pop("topo_override", None)
+    st.session_state.pop("_plan_cache", None)
