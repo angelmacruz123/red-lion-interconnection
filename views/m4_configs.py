@@ -6,7 +6,9 @@ import streamlit as st
 
 from core.state import VENDORS, get_config, get_plan
 from core.validators import ValidationError, validate_ipv4_host
+from core.security_audit import audit, summary
 from generators import Extras, bundle_zip, render_all
+from generators.common import Ctx, device_summary
 from ui.components import Stat, callout, hero, section, stat_grid
 
 LANG = {"Cisco": "cisco", "Huawei": "bash", "Fortinet": "bash", "MikroTik": "bash"}
@@ -58,17 +60,20 @@ def render() -> None:
     secrets = [p for p in placeholders if any(k in p for k in ("SECRET", "PSK", "SNMPV3", "CERT", "USER"))]
     pending = [p for p in placeholders if p not in secrets]
     total_lines = sum(len(c.text.splitlines()) for c in configs)
+    audits = {c.device_id: audit(c.text) for c in configs}
+    risky = sum(1 for f in audits.values() for x in f if x.severity in ("alta", "media"))
 
     stat_grid([
         Stat("Archivos generados", str(len(configs)), f"uno por equipo · {vendor}"),
         Stat("Líneas de configuración", f"{total_lines:,}", "deterministas desde el plan IP"),
-        Stat("Secretos como marcador", str(len(secrets)), "se inyectan en el despliegue"),
+        Stat("Auditoría de seguridad", f"{risky} riesgos", "Telnet, credenciales por defecto, SNMP, ACL…",
+             tone="ok" if not risky else "bad"),
         Stat("Parámetros pendientes", str(len(pending)),
              "complételos en el panel del sitio remoto" if pending else "ninguno",
              tone="warn" if pending else "ok"),
     ])
-    callout("Los archivos nunca contienen contraseñas reales: use su gestor de secretos o el .env local "
-            "para reemplazar " + ", ".join(secrets) + " antes de aplicar.", "warn")
+    callout(f"Los archivos nunca contienen contraseñas reales ({len(secrets)} secretos quedan como marcador): use su "
+            "gestor de secretos o el .env local para reemplazar " + ", ".join(secrets) + " antes de aplicar.", "warn")
 
     section("Vista previa por equipo")
     roles = {"edge": "Borde", "dist": "Distribución", "core": "Núcleo", "access": "Acceso", "server": "Servidores",
@@ -76,6 +81,23 @@ def render() -> None:
     labels = [f"{roles[c.role]} · {c.hostname}" for c in configs]
     idx = st.selectbox("Equipo", range(len(configs)), format_func=lambda i: labels[i])
     sel = configs[idx]
+    dev = topo.get(sel.device_id)
+    vlans, ips = device_summary(Ctx(cfg, plan, topo, get_extras()), dev)
+    a, b, c = st.columns([1.1, 1.4, 2.5])
+    a.markdown(f"**Hostname**  \n`{sel.hostname}`  \n\n**Plataforma**  \n{sel.vendor} {sel.platform}")
+    b.markdown("**VLAN configuradas**  \n" + (", ".join(f"`{v}`" for v in vlans) if vlans else "— (equipo de capa 3)"))
+    shown = ips[:6]
+    c.markdown("**Direcciones IP**  \n" + "  \n".join(f"`{ip}` · {name}" for name, ip in shown)
+               + (f"  \n… y {len(ips) - 6} más" if len(ips) > 6 else ""))
+    findings = audits[sel.device_id]
+    if findings:
+        cnt = summary(findings)
+        st.error(f"Auditoría: {cnt['alta']} riesgos altos, {cnt['media']} medios, {cnt['baja']} bajos en {sel.filename}.")
+        st.dataframe([{"Severidad": f.severity, "Línea": f.line, "Problema": f.message, "Corrección": f.fix}
+                      for f in findings], hide_index=True, width="stretch")
+    else:
+        st.success(f"Auditoría de seguridad sin hallazgos en {sel.filename}: solo SSH v2, sin credenciales por "
+                   "defecto, SNMPv3 y acceso de gestión limitado a la VLAN 99.")
     st.caption(f"{sel.vendor} {sel.platform} · {len(sel.text.splitlines())} líneas · {sel.filename}")
     st.code(sel.text, language=LANG[vendor], line_numbers=True, height=520)
 

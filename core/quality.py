@@ -37,6 +37,7 @@ CATEGORIES = {
     "test_serial": "M5 · Consola serial (COM)",
     "test_validators": "M6 · Validación de entradas",
     "test_security": "M6 · Anti-fuga de credenciales",
+    "test_security_audit": "M6 · Configuraciones inseguras",
     "test_app": "UI · Streamlit (AppTest)",
 }
 

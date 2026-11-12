@@ -13,6 +13,7 @@ from core.state import VENDORS, get_config, get_plan
 from core.validators import ValidationError, parse_command_batch, redact_secrets
 from generators import render_device
 from generators.common import Ctx
+from core.security_audit import audit, summary
 from netdevops.deploy import CATEGORIES, DEFAULT_CATEGORIES, SECRET_ENV, build_deploy_plan, execute
 from netdevops.simulator import LabSimulator, SimState
 from netdevops.serial_client import BAUD_RATES, SerialConsoleSession, list_serial_ports
@@ -220,6 +221,11 @@ def _deploy_tab(conn: Conn, ctx: Ctx) -> None:
     if plan.skipped:
         with st.expander(f"Ver {len(plan.skipped)} bloques omitidos"):
             st.code("\n".join(plan.skipped), language="text")
+    risks = [f for f in audit(plan.preview()) if f.severity in ("alta", "media")]
+    if risks:
+        cnt = summary(risks)
+        st.warning(f"La auditoría encontró {cnt['alta']} riesgos altos y {cnt['media']} medios en este lote: "
+                   + "; ".join(sorted({f.message for f in risks}))[:400])
     st.code(plan.preview(), language="cisco" if conn.vendor == "Cisco" else "bash", line_numbers=True, height=340)
     st.download_button("Descargar este lote (.txt)", plan.preview().encode(), f"despliegue_{dev.hostname}.txt",
                        width="content")

@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from core import quality
+from core.security_audit import INSECURE_SAMPLE, audit, summary
 from core.validators import ValidationError, is_destructive, redact_secrets, validate_command
 from ui.components import Stat, callout, hero, section, stat_grid
 
@@ -52,7 +53,10 @@ def render() -> None:
         c2.download_button("Descargar pruebas.md", quality.render_markdown(report).encode("utf-8"),
                            "pruebas.md", "text/markdown", width="stretch")
 
-    t1, t2, t3 = st.tabs(["Controles de seguridad", "Resultados de pruebas", "Laboratorio de validación"])
+    t1, t2, t4, t3 = st.tabs(["Controles de seguridad", "Resultados de pruebas", "Auditar configuración",
+                              "Laboratorio de validación"])
+    with t4:
+        _audit_lab()
     with t1:
         st.dataframe(pd.DataFrame([{"Estado": "✅" if c.ok else "❌", "Control": c.name, "Detalle": c.detail}
                                    for c in checks]), hide_index=True, width="stretch")
@@ -86,3 +90,19 @@ def render() -> None:
                               "snmp-server community Publica123 RO\nset psksecret ENC hXk29sd==\n"
                               "/user add name=ops password=Sup3rS3creta", height=110)
         st.code(redact_secrets(sample), language="text")
+
+
+def _audit_lab() -> None:
+    section("Advertencia de configuraciones inseguras")
+    callout("Pegue la configuración de un equipo (o la que le sugirió una IA) y la herramienta le advierte lo que "
+            "contradice el mínimo privilegio antes de aplicarla. El ejemplo trae errores típicos a propósito.")
+    text = st.text_area("Configuración a revisar", INSECURE_SAMPLE, height=230, key="audit_text")
+    findings = audit(text)
+    if not findings:
+        st.success("Sin hallazgos: la configuración no muestra los problemas que la herramienta revisa.")
+        return
+    cnt = summary(findings)
+    st.error(f"Configuración insegura: {cnt['alta']} riesgos altos, {cnt['media']} medios y {cnt['baja']} bajos. "
+             "No la aplique sin corregirla.")
+    st.dataframe([{"Severidad": f.severity.upper(), "Línea": f.line or "—", "Texto": f.text, "Problema": f.message,
+                   "Corrección": f.fix} for f in findings], hide_index=True, width="stretch")
